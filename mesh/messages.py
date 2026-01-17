@@ -23,7 +23,6 @@ def parse_message_timestamp(message_line):
     match = re.search(r'^\[([^\]]+)\]\s*(.*)', message_line)
     if match:
         timestamp_str = match.group(1)
-        remaining_line = match.group(2)
 
         # Try different possible timestamp formats
         possible_formats = [
@@ -142,7 +141,7 @@ def load_all_history():
 
 def process_event_message(mc, ev):
     """Process incoming message events and format output"""
-    global recent_channels, recent_users
+    global recent_channels, recent_users  # noqa: F824 - variables are modified with .add() method
     from meshcore import EventType
 
     if ev is None:
@@ -350,10 +349,7 @@ def clean_history_files():
 async def send_message(mc, channel_input, text):
     """Send a message to a channel"""
     # Import here to avoid circular imports
-    from .meshchat import mc_global
     from meshcore import EventType
-
-    global recent_channels, recent_users
 
     # Find channel by name
     channel_idx = None
@@ -435,6 +431,7 @@ async def send_message(mc, channel_input, text):
             f"{status_msg}"
         )
         print(colored_message)
+        print(f"{ANSI_BRED}Error sending message: {e}{ANSI_END}")
 
         # Save to history file
         save_to_history(channel_input, f"[{timestamp}] {display_channel_name}: [{own_name}] {text}")
