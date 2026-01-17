@@ -155,6 +155,22 @@ def load_all_history(append_output_callback=None):
         else:
             print(msg)
 
+        # Extract channel and user information from the message for autocompletion
+        # Format: [timestamp] #channel: [user] text
+        import re
+        match = re.match(r'^\[.+\] #([^:]+):\s*\[([^\]]+)\].*', msg)
+        if match:
+            channel_name = match.group(1)
+            user_name = match.group(2)
+
+            # Add to global sets
+            recent_channels.add(channel_name)
+            recent_users.add(user_name)
+
+            # Add channel with # prefix as well for autocomplete
+            channel_with_prefix = f"#{channel_name}" if not channel_name.startswith('#') else channel_name
+            recent_channels.add(channel_with_prefix)
+
 
 def process_event_message(mc, ev, append_output_callback=None):
     """Process incoming message events and format output"""
@@ -206,6 +222,8 @@ def process_event_message(mc, ev, append_output_callback=None):
             # First try to use the name field directly if available
             if 'name' in data and data['name']:
                 sender = data['name']
+                # Add to recent users if we have a name
+                recent_users.add(data['name'])
             # Then try to look up by pubkey_prefix
             elif 'pubkey_prefix' in data:
                 ct = mc.get_contact_by_key_prefix(data['pubkey_prefix'])
@@ -388,7 +406,7 @@ def clean_history_files():
         remove_duplicate_messages(channel_name)
 
 
-async def send_message(mc, channel_input, text, append_output_callback=None, app_instance=None):
+async def send_message(mc, channel_input, text, append_output_callback=None):
     """Send a message to a channel"""
     # Import here to avoid circular imports
     from meshcore import EventType
@@ -459,6 +477,11 @@ async def send_message(mc, channel_input, text, append_output_callback=None, app
     actual_channel_name = display_channel_name if display_channel_name.startswith('#') else f"#{channel_input}"
     save_to_history(actual_channel_name, f"[{timestamp}] {display_channel_name}: [{own_name}] {text}")
 
+    # Add to recent channels for autocompletion
+    from .messages import recent_channels
+    recent_channels.add(channel_input)
+
+
     # Send the message
     try:
         log_debug(f"SENDING MESSAGE: Attempting to send to channel_idx={channel_idx}")
@@ -482,13 +505,6 @@ async def send_message(mc, channel_input, text, append_output_callback=None, app
             status_msg = "✗ ERROR"  # Error
             log_debug(f"SENDING MESSAGE: Status set to ERROR, response type: {res.type}")
 
-        # Update the last message status in the app instance if available
-        if app_instance:
-            status_symbol = "⚠" if status_msg == "⚠ TIMEOUT" else ("✓✓" if status_msg == "✓✓ DELIVERED" else "✗")
-            app_instance.last_message_status = status_symbol
-            # Refresh the status bar
-            if hasattr(app_instance, 'app'):
-                app_instance.app.invalidate()
 
     except Exception as e:
         # Error status
@@ -508,12 +524,6 @@ async def send_message(mc, channel_input, text, append_output_callback=None, app
         # Log the exception
         log_debug(f"SENDING MESSAGE: Exception occurred: {e}")
 
-        # Update the last message status in the app instance if available
-        if app_instance:
-            app_instance.last_message_status = "✗"
-            # Refresh the status bar
-            if hasattr(app_instance, 'app'):
-                app_instance.app.invalidate()
 
         # Save to history file with # symbol in the filename
         actual_channel_name = display_channel_name if display_channel_name.startswith('#') else f"#{channel_input}"
