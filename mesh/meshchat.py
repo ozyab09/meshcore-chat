@@ -5,24 +5,14 @@ Supports sending messages in the format #channel: message
 """
 
 import asyncio
-import os
-import time
 import hashlib
-import json
 import logging
-from pathlib import Path
-from prompt_toolkit import Application
-from prompt_toolkit.buffer import Buffer
-from prompt_toolkit.layout.containers import HSplit, Window
-from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
-from prompt_toolkit.layout import Layout
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.styles import Style
+
 from meshcore import MeshCore, EventType
 
 from .constants import ANSI_BOLD, ANSI_BCYAN, ANSI_END
 from .config import get_connection_params
-from .messages import process_event_message, recent_channels, recent_users, load_all_history, clean_history_files
+from .messages import process_event_message, recent_channels, load_all_history, clean_history_files
 from .input_handler import input_handler
 
 # Global variable to store the meshcore instance
@@ -53,7 +43,8 @@ async def load_device_history(mc):
             # If no specific method exists, we rely on the auto-message-fetching
             # that happens later in the code, but we'll wait a bit to allow any
             # initial messages to arrive
-            print(f"{ANSI_BCYAN}No specific history fetch method found. Historical messages may be retrieved through auto-fetching.{ANSI_END}")
+            msg = "No specific history fetch method found. Historical messages may be retrieved through auto-fetching."
+            print(f"{ANSI_BCYAN}{msg}{ANSI_END}")
 
     except Exception as e:
         print(f"{ANSI_BCYAN}Error during history loading attempt: {e}{ANSI_END}")
@@ -64,7 +55,8 @@ async def main_func():
     global mc_global
 
     print(f"{ANSI_BOLD}{ANSI_BCYAN}╔" + "═" * 78 + f"╗{ANSI_END}")
-    print(f"{ANSI_BOLD}{ANSI_BCYAN}║{ANSI_END}{'MESHCORE MESSENGER CLIENT':^78}{ANSI_BOLD}{ANSI_BCYAN}║{ANSI_END}")
+    title = f"{'MESHCORE MESSENGER CLIENT':^78}"
+    print(f"{ANSI_BOLD}{ANSI_BCYAN}║{ANSI_END}{title}{ANSI_BOLD}{ANSI_BCYAN}║{ANSI_END}")
     print(f"{ANSI_BOLD}{ANSI_BCYAN}╚" + "═" * 78 + f"╝{ANSI_END}")
 
     # Get connection parameters

@@ -2,25 +2,25 @@ import unittest
 import tempfile
 import os
 from pathlib import Path
-from datetime import datetime
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, patch
 from mesh.messages import (
-    parse_message_timestamp, 
-    load_history_from_file, 
-    load_all_history, 
-    process_event_message, 
-    save_to_history, 
-    remove_duplicate_messages,
-    clean_history_files
+    parse_message_timestamp,
+    load_history_from_file,
+    process_event_message,
+    save_to_history,
+    remove_duplicate_messages
 )
-from mesh.config import get_config_path, load_config, save_config, get_connection_params
-from mesh.constants import *
-from mesh.meshchat import load_device_history
+from mesh.config import get_config_path, load_config, save_config
+from mesh.constants import (
+    ANSI_END, ANSI_GREEN, ANSI_BGREEN, ANSI_BLUE, ANSI_BBLUE, ANSI_RED,
+    ANSI_BRED, ANSI_MAGENTA, ANSI_BMAGENTA, ANSI_CYAN, ANSI_BCYAN,
+    ANSI_YELLOW, ANSI_BYELLOW, ANSI_WHITE, ANSI_GREY, ANSI_BOLD
+)
 
 
 class TestConstants(unittest.TestCase):
     """Test constants module"""
-    
+
     def test_constants_exist(self):
         """Test that all required constants exist"""
         self.assertIsInstance(ANSI_END, str)
@@ -43,18 +43,18 @@ class TestConstants(unittest.TestCase):
 
 class TestMessages(unittest.TestCase):
     """Test messages module functionality"""
-    
+
     def setUp(self):
         """Set up test fixtures"""
         self.temp_dir = tempfile.mkdtemp()
         self.history_dir = Path(self.temp_dir) / "history"
         self.history_dir.mkdir(exist_ok=True)
-        
+
     def tearDown(self):
         """Clean up test fixtures"""
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
-    
+
     def test_parse_message_timestamp_full_format(self):
         """Test parsing full timestamp format"""
         message = "[17-Jan-26 22:46:29] #Public: [mdshost] Test message"
@@ -66,7 +66,7 @@ class TestMessages(unittest.TestCase):
         self.assertEqual(timestamp.hour, 22)
         self.assertEqual(timestamp.minute, 46)
         self.assertEqual(timestamp.second, 29)
-    
+
     def test_parse_message_timestamp_time_only_format(self):
         """Test parsing time-only format"""
         message = "[21:03:10] #Public: [robot] Test message"
@@ -76,26 +76,26 @@ class TestMessages(unittest.TestCase):
         self.assertEqual(timestamp.hour, 21)
         self.assertEqual(timestamp.minute, 3)
         self.assertEqual(timestamp.second, 10)
-    
+
     def test_parse_message_timestamp_invalid_format(self):
         """Test parsing invalid timestamp format"""
         message = "Invalid message format"
         timestamp = parse_message_timestamp(message)
         self.assertIsNone(timestamp)
-    
+
     def test_save_to_history_and_load(self):
         """Test saving and loading history"""
         channel_name = "test_channel"
         message = "[17-Jan-26 22:46:29] #test_channel: [user] Test message"
-        
+
         # Change history directory temporarily
         original_history_dir = Path("history")
         original_history_dir.rename(self.temp_dir + "/original_history") if original_history_dir.exists() else None
         os.rename(str(self.history_dir), "history")
-        
+
         try:
             save_to_history(channel_name, message)
-            
+
             loaded_messages = load_history_from_file(channel_name)
             self.assertEqual(len(loaded_messages), 1)
             self.assertEqual(loaded_messages[0], message)
@@ -105,22 +105,22 @@ class TestMessages(unittest.TestCase):
             original_hist_path = Path(self.temp_dir + "/original_history")
             if original_hist_path.exists():
                 original_hist_path.rename(original_history_dir)
-    
+
     def test_save_to_history_no_duplicates(self):
         """Test that duplicates are not saved"""
         channel_name = "test_channel"
         message = "[17-Jan-26 22:46:29] #test_channel: [user] Test message"
-        
+
         # Change history directory temporarily
         original_history_dir = Path("history")
         original_history_dir.rename(self.temp_dir + "/original_history") if original_history_dir.exists() else None
         os.rename(str(self.history_dir), "history")
-        
+
         try:
             # Save the same message twice
             save_to_history(channel_name, message)
             save_to_history(channel_name, message)
-            
+
             loaded_messages = load_history_from_file(channel_name)
             self.assertEqual(len(loaded_messages), 1)  # Should only have one copy
             self.assertEqual(loaded_messages[0], message)
@@ -130,19 +130,19 @@ class TestMessages(unittest.TestCase):
             original_hist_path = Path(self.temp_dir + "/original_history")
             if original_hist_path.exists():
                 original_hist_path.rename(original_history_dir)
-    
+
     def test_remove_duplicate_messages(self):
         """Test removing duplicate messages from a file"""
         # Change history directory temporarily
         original_history_dir = Path("history")
         original_history_dir.rename(self.temp_dir + "/original_history") if original_history_dir.exists() else None
         os.rename(str(self.history_dir), "history")
-        
+
         try:
             channel_name = "duplicate_test"
             message1 = "[17-Jan-26 22:46:29] #duplicate_test: [user1] First message"
             message2 = "[17-Jan-26 22:47:30] #duplicate_test: [user2] Second message"
-            
+
             # Create a file with duplicates
             log_file = Path("history") / f"{channel_name}.log"
             with open(log_file, "w", encoding="utf-8") as f:
@@ -150,14 +150,14 @@ class TestMessages(unittest.TestCase):
                 f.write(message2 + "\n")
                 f.write(message1 + "\n")  # Duplicate
                 f.write(message2 + "\n")  # Duplicate
-            
+
             # Remove duplicates
             remove_duplicate_messages(channel_name)
-            
+
             # Check the result
             with open(log_file, "r", encoding="utf-8") as f:
                 lines = [line.strip() for line in f if line.strip()]
-            
+
             # Should have 2 unique messages
             self.assertEqual(len(lines), 2)
             self.assertIn(message1, lines)
@@ -172,18 +172,18 @@ class TestMessages(unittest.TestCase):
 
 class TestConfig(unittest.TestCase):
     """Test config module functionality"""
-    
+
     def setUp(self):
         """Set up test fixtures"""
         self.temp_dir = tempfile.mkdtemp()
         self.config_dir = Path(self.temp_dir) / ".config" / "meshcore"
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        
+
     def tearDown(self):
         """Clean up test fixtures"""
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
-    
+
     @patch('pathlib.Path.home')
     def test_get_config_path(self, mock_home):
         """Test getting config path"""
@@ -191,17 +191,21 @@ class TestConfig(unittest.TestCase):
         config_path = get_config_path()
         expected_path = Path(self.temp_dir) / ".config" / "meshcore" / "mesh-cli.json"
         self.assertEqual(config_path, expected_path)
-    
+
     @patch('pathlib.Path.home')
     def test_load_and_save_config(self, mock_home):
         """Test loading and saving config"""
         mock_home.return_value = Path(self.temp_dir)
         config_path = get_config_path()
-        
+
+        # Verify config path is constructed correctly
+        expected_path = Path(self.temp_dir) / ".config" / "meshcore" / "mesh-cli.json"
+        self.assertEqual(config_path, expected_path)
+
         # Save config
         test_config = {"host": "127.0.0.1", "port": 5000}
         save_config(test_config)
-        
+
         # Load config
         loaded_config = load_config()
         self.assertEqual(loaded_config, test_config)
@@ -209,18 +213,18 @@ class TestConfig(unittest.TestCase):
 
 class TestProcessEventMessage(unittest.TestCase):
     """Test process_event_message function"""
-    
+
     def setUp(self):
         """Set up test fixtures"""
         self.temp_dir = tempfile.mkdtemp()
         self.history_dir = Path(self.temp_dir) / "history"
         self.history_dir.mkdir(exist_ok=True)
-        
+
     def tearDown(self):
         """Clean up test fixtures"""
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
-    
+
     @patch('builtins.print')  # Mock print function to avoid console output during tests
     def test_process_event_message_channel(self, mock_print):
         """Test processing channel message events"""
@@ -228,14 +232,14 @@ class TestProcessEventMessage(unittest.TestCase):
         original_history_dir = Path("history")
         original_history_dir.rename(self.temp_dir + "/original_history") if original_history_dir.exists() else None
         os.rename(str(self.history_dir), "history")
-        
+
         try:
             # Create mock MC object
             mc = Mock()
             mc.channels = [{'channel_name': 'test_channel'}]
             mc.self_info = {'name': 'test_user'}
             mc.get_contact_by_key_prefix.return_value = {"adv_name": "test_contact"}
-            
+
             # Create mock event
             class MockEvent:
                 def __init__(self):
@@ -248,15 +252,15 @@ class TestProcessEventMessage(unittest.TestCase):
                         'name': 'test_user',
                         'pubkey_prefix': 'abc123'
                     }
-            
+
             event = MockEvent()
-            
+
             # Process the event
             result = process_event_message(mc, event)
-            
+
             # Verify the result
             self.assertTrue(result)
-            
+
             # Verify that a message was printed
             mock_print.assert_called()
         finally:
@@ -265,7 +269,7 @@ class TestProcessEventMessage(unittest.TestCase):
             original_hist_path = Path(self.temp_dir + "/original_history")
             if original_hist_path.exists():
                 original_hist_path.rename(original_history_dir)
-    
+
     @patch('builtins.print')  # Mock print function to avoid console output during tests
     def test_process_event_message_private(self, mock_print):
         """Test processing private message events"""
@@ -273,14 +277,14 @@ class TestProcessEventMessage(unittest.TestCase):
         original_history_dir = Path("history")
         original_history_dir.rename(self.temp_dir + "/original_history") if original_history_dir.exists() else None
         os.rename(str(self.history_dir), "history")
-        
+
         try:
             # Create mock MC object
             mc = Mock()
             mc.channels = [{'channel_name': 'test_channel'}]
             mc.self_info = {'name': 'test_user'}
             mc.get_contact_by_key_prefix.return_value = {"adv_name": "test_contact"}
-            
+
             # Create mock event
             class MockEvent:
                 def __init__(self):
@@ -292,15 +296,15 @@ class TestProcessEventMessage(unittest.TestCase):
                         'name': 'test_user',
                         'pubkey_prefix': 'abc123'
                     }
-            
+
             event = MockEvent()
-            
+
             # Process the event
             result = process_event_message(mc, event)
-            
+
             # Verify the result
             self.assertTrue(result)
-            
+
             # Verify that a message was printed
             mock_print.assert_called()
         finally:
