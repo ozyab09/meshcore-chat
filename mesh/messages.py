@@ -84,7 +84,7 @@ def parse_message_timestamp(message_line):
                                 formatted_datetime = f"{formatted_date} {time_part}"
                                 parsed_dt = dt_module.datetime.strptime(formatted_datetime, "%Y-%m-%d %H:%M:%S")
                                 return parsed_dt
-            except:
+            except Exception:
                 pass
 
     return None
@@ -360,7 +360,9 @@ async def send_message(mc, channel_input, text):
                 channel_idx = idx
                 break
             # Also check if channel name matches without the # prefix
-            elif channel['channel_name'] and channel['channel_name'].startswith('#') and channel['channel_name'][1:] == channel_input:
+            elif (channel['channel_name'] and
+                  channel['channel_name'].startswith('#') and
+                  channel['channel_name'][1:] == channel_input):
                 channel_idx = idx
                 break
 
