@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "meshcore-chat"
+version = "1.0.0"
+authors = [
+  { name="Vyacheslav Egorov" },
+]
+description = "Клиент для чата MeshCore с полноэкранным интерфейсом"
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "meshcore >= 2.2.3",
+    "prompt_toolkit >= 3.0.50",
+    "pycryptodome"
+]
+
+[project.urls]
+Homepage = "https://github.com/ozyab09/meshcore-chat"
+Issues = "https://github.com/ozyab09/meshcore-chat/issues"
+
+[project.scripts]
+meshchat = "mesh.meshchat:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mesh"]

@@ -1,0 +1,21 @@
+"""
+Constants for MeshChat application
+"""
+
+# ANSI color codes
+ANSI_END = "\033[0m"
+ANSI_GREEN = "\033[0;32m"
+ANSI_BGREEN = "\033[1;32m"
+ANSI_BLUE = "\033[0;34m"
+ANSI_BBLUE = "\033[1;34m"
+ANSI_RED = "\033[0;31m"
+ANSI_BRED = "\033[1;31m"
+ANSI_MAGENTA = "\033[0;35m"
+ANSI_BMAGENTA = "\033[1;35m"
+ANSI_CYAN = "\033[0;36m"
+ANSI_BCYAN = "\033[1;36m"
+ANSI_YELLOW = "\033[0;33m"
+ANSI_BYELLOW = "\033[1;33m"
+ANSI_WHITE = "\033[0;37m"
+ANSI_GREY = "\033[0;37m"
+ANSI_BOLD = "\033[1m"
