@@ -117,10 +117,7 @@ def load_history_from_file(channel_name):
                     messages.append(line)
     except Exception as e:
         error_msg = f"Error reading history file {log_file}: {e}"
-        if append_output_callback:
-            append_output_callback(error_msg)
-        else:
-            print(error_msg)
+        print(error_msg)
 
     return messages
 
