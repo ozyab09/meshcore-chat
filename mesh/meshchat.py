@@ -165,11 +165,33 @@ class MeshChatApp:
         if self.last_message_status:
             left_side += f' | MSG: {self.last_message_status}'
 
+        # Add the instruction text to the left side
+        instruction_text = "Use: #channel: msg or @contact: msg"
+        left_side += f' | {instruction_text}'
+
         right_side = f'Device: {self.device_name} | {self.host}:{self.port}'
 
+        # Split the left side to apply different formatting to the instruction text
+        parts = left_side.split(' | ')
+        formatted_parts = []
+
+        for i, part in enumerate(parts):
+            if "Use format:" in part:
+                # Instruction text should be white
+                formatted_parts.append(('', part))
+            else:
+                # Status text should be colored
+                if i == 0:  # This is the connection status part
+                    formatted_parts.append((f'{status_color} bold', part))
+                else:
+                    formatted_parts.append(('', part))
+
+            # Add separator except for the last element
+            if i < len(parts) - 1:
+                formatted_parts.append(('', ' | '))
+
         # Return as a single formatted line with left and right aligned content
-        return [
-            (f'{status_color} bold', left_side),
+        return formatted_parts + [
             ('', ' ' * (self.get_terminal_width() - len(left_side) - len(right_side))),  # Spacer
             ('', right_side)
         ]
@@ -186,8 +208,9 @@ class MeshChatApp:
 
     def get_instruction_bar(self):
         """Get the formatted instruction bar content"""
-        left_side = "Use format: #channel_name: message to send messages"
-        right_side = "Press Ctrl+C to exit or type 'help' to see available channels/users"
+        # Left side shows the status of the last sent message
+        left_side = f"Last message: {self.last_message_status if self.last_message_status else 'No message sent yet'}"
+        right_side = "Press Ctrl+C to exit or type '/help' to see available channels/users"
 
         # Calculate spacing to align the right side content
         total_len = len(left_side) + len(right_side)
@@ -222,24 +245,20 @@ class MeshChatApp:
             self.append_output(f"{ANSI_BCYAN}Hint: Use format #channel: message to send messages{ANSI_END}")
             return
 
-        if user_input.lower() == 'help':
+        if user_input.lower() == '/help':
             show_available_channels_and_users(self.append_output)
             return
 
-        # Parse input in format #channel: message
+        # Parse input in format #channel: message or @contact: message
         match = re.match(r'^([^:]+):\s*(.+)$', user_input.strip())
         if match:
-            channel_part = match.group(1).strip()
+            target = match.group(1).strip()
             message_text = match.group(2).strip()
 
-            # Remove leading # if present
-            if channel_part.startswith('#'):
-                channel_part = channel_part[1:]
-
             # Schedule the message sending in the event loop
-            asyncio.create_task(send_message(self.mc, channel_part, message_text, self.append_output, self))
+            asyncio.create_task(send_message(self.mc, target, message_text, self.append_output, self))
         else:
-            self.append_output(f"{ANSI_BRED}Invalid format. Use: #channel_name: message{ANSI_END}")
+            self.append_output(f"{ANSI_BRED}Invalid format. Use: #channel_name: message or @contact_name: message{ANSI_END}")
 
     async def load_device_history(self, mc):
         """Load message history from the device"""

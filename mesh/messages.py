@@ -403,49 +403,73 @@ def clean_history_files():
         remove_duplicate_messages(channel_name)
 
 
-async def send_message(mc, channel_input, text, append_output_callback=None):
-    """Send a message to a channel"""
+async def send_message(mc, target, text, append_output_callback=None, app_instance=None, timeout=60):
+    """Send a message to a channel or contact (private message)"""
     # Import here to avoid circular imports
     from meshcore import EventType
 
-    # Find channel by name
-    channel_idx = None
-    if hasattr(mc, "channels") and mc.channels:
-        for idx, channel in enumerate(mc.channels):
-            # Check exact match or match with # prefix
-            if channel['channel_name'] == channel_input or f"#{channel['channel_name']}" == channel_input:
-                channel_idx = idx
-                break
-            # Also check if channel name matches without the # prefix
-            elif (channel['channel_name'] and
-                  channel['channel_name'].startswith('#') and
-                  channel['channel_name'][1:] == channel_input):
-                channel_idx = idx
-                break
+    # Determine if this is a channel message or private message
+    is_channel_msg = not target.startswith('@')
+    target_name = target[1:] if target.startswith('@') else target
 
-    # If not found by name, check if it's a channel index
-    if channel_idx is None and channel_input.startswith("ch") and channel_input[2:].isdigit():
-        channel_idx = int(channel_input[2:])
-
-    # If still not found, try to match by index without "ch" prefix
-    if channel_idx is None and channel_input.isdigit():
-        channel_idx = int(channel_input)
-
-    if channel_idx is None:
-        error_msg = f"{ANSI_BRED}Error: Channel '{channel_input}' not found{ANSI_END}"
-        if append_output_callback:
-            append_output_callback(ANSI(error_msg))
-        else:
-            print(error_msg)
-        # Print available channels for debugging
+    if is_channel_msg:
+        # Find channel by name
+        channel_idx = None
         if hasattr(mc, "channels") and mc.channels:
-            available = [ch['channel_name'] for ch in mc.channels if ch['channel_name'] and ch['channel_name'] != ""]
-            available_msg = f"{ANSI_BCYAN}Available channels: {available}{ANSI_END}"
+            for idx, channel in enumerate(mc.channels):
+                # Check exact match or match with # prefix
+                if channel['channel_name'] == target_name or f"#{channel['channel_name']}" == target_name:
+                    channel_idx = idx
+                    break
+                # Also check if channel name matches without the # prefix
+                elif (channel['channel_name'] and
+                      channel['channel_name'].startswith('#') and
+                      channel['channel_name'][1:] == target_name):
+                    channel_idx = idx
+                    break
+
+        # If not found by name, check if it's a channel index
+        if channel_idx is None and target_name.startswith("ch") and target_name[2:].isdigit():
+            channel_idx = int(target_name[2:])
+
+        # If still not found, try to match by index without "ch" prefix
+        if channel_idx is None and target_name.isdigit():
+            channel_idx = int(target_name)
+
+        if channel_idx is None:
+            error_msg = f"{ANSI_BRED}Error: Channel '{target_name}' not found{ANSI_END}"
             if append_output_callback:
-                append_output_callback(ANSI(available_msg))
+                append_output_callback(ANSI(error_msg))
             else:
-                print(available_msg)
-        return False
+                print(error_msg)
+            # Print available channels for debugging
+            if hasattr(mc, "channels") and mc.channels:
+                available = [ch['channel_name'] for ch in mc.channels if ch['channel_name'] and ch['channel_name'] != ""]
+                available_msg = f"{ANSI_BCYAN}Available channels: {available}{ANSI_END}"
+                if append_output_callback:
+                    append_output_callback(ANSI(available_msg))
+                else:
+                    print(available_msg)
+            return False
+    else:
+        # Find contact by name
+        contact = None
+        if hasattr(mc, "contacts") and mc.contacts:
+            for c in mc.contacts:
+                if c.get('adv_name', '').lower() == target_name.lower():
+                    contact = c
+                    break
+        else:
+            # Try to find contact by key prefix if contacts are not loaded yet
+            contact = mc.get_contact_by_key_prefix(target_name)
+
+        if contact is None:
+            error_msg = f"{ANSI_BRED}Error: Contact '{target_name}' not found{ANSI_END}"
+            if append_output_callback:
+                append_output_callback(ANSI(error_msg))
+            else:
+                print(error_msg)
+            return False
 
     # Format timestamp
     timestamp = datetime.datetime.now().strftime("%d-%b-%y %H:%M:%S")
@@ -453,42 +477,67 @@ async def send_message(mc, channel_input, text, append_output_callback=None):
     # Get own name from device info
     own_name = mc.self_info.get('name', 'Me')
 
-    # Format channel name for display - add # prefix if it doesn't already have one
-    display_channel_name = channel_input if channel_input.startswith('#') else f"#{channel_input}"
+    if is_channel_msg:
+        # Format channel name for display - add # prefix if it doesn't already have one
+        display_channel_name = target_name if target_name.startswith('#') else f"#{target_name}"
 
-    # Format message for display (without status indicators initially)
-    display_message = (
-        f"[{timestamp}] {display_channel_name}: [{own_name}] {text}"
-    )
+        # Format message for display (without status indicators initially)
+        display_message = (
+            f"[{timestamp}] {display_channel_name}: [{own_name}] {text}"
+        )
 
-    # Display the message immediately in the UI
-    if append_output_callback:
-        append_output_callback(display_message)
+        # Display the message immediately in the UI
+        if append_output_callback:
+            append_output_callback(display_message)
+        else:
+            print(display_message)
+
+        # Log the outgoing message
+        log_debug(f"OUTGOING MESSAGE: channel={target_name}, text='{text}', timestamp={timestamp}")
+
+        # Save to history file with # symbol in the filename
+        actual_channel_name = display_channel_name if display_channel_name.startswith('#') else f"#{target_name}"
+        save_to_history(actual_channel_name, f"[{timestamp}] {display_channel_name}: [{own_name}] {text}")
     else:
-        print(display_message)
+        # Format private message for display
+        display_message = (
+            f"[{timestamp}] #private: [{own_name}] {text}"
+        )
 
-    # Log the outgoing message
-    log_debug(f"OUTGOING MESSAGE: channel={channel_input}, text='{text}', timestamp={timestamp}")
+        # Display the message immediately in the UI
+        if append_output_callback:
+            append_output_callback(display_message)
+        else:
+            print(display_message)
 
-    # Save to history file with # symbol in the filename
-    actual_channel_name = display_channel_name if display_channel_name.startswith('#') else f"#{channel_input}"
-    save_to_history(actual_channel_name, f"[{timestamp}] {display_channel_name}: [{own_name}] {text}")
+        # Log the outgoing private message
+        log_debug(f"OUTGOING PRIVATE MESSAGE: contact={target_name}, text='{text}', timestamp={timestamp}")
 
-    # Add to recent channels for autocompletion
-    from .messages import recent_channels
-    recent_channels.add(channel_input)
+        # Save to private history file
+        save_to_history("private", f"[{timestamp}] #private: [{own_name}] {text}")
+
 
 
     # Send the message
     try:
-        log_debug(f"SENDING MESSAGE: Attempting to send to channel_idx={channel_idx}")
-        res = await mc.commands.send_chan_msg(channel_idx, text)
+        if is_channel_msg:
+            log_debug(f"SENDING MESSAGE: Attempting to send to channel_idx={channel_idx}")
+            res = await mc.commands.send_chan_msg(channel_idx, text)
+        else:
+            # Send private message to contact
+            log_debug(f"SENDING PRIVATE MESSAGE: Attempting to send to contact={contact}")
+            # Get the contact's public key or identifier
+            contact_key = contact.get('pubkey', contact.get('pubkey_prefix')) if contact else None
+            if contact_key:
+                res = await mc.commands.send_contact_msg(contact_key, text)
+            else:
+                raise Exception(f"Could not find public key for contact {target_name}")
         log_debug(f"SENDING MESSAGE: Response received: {res}")
 
         # Wait for ACK to determine final status
         if res and res.type != EventType.ERROR:
             log_debug("SENDING MESSAGE: Waiting for ACK...")
-            ack_res = await mc.wait_for_event(EventType.ACK, timeout=10)
+            ack_res = await mc.wait_for_event(EventType.ACK, timeout=timeout)
             log_debug(f"SENDING MESSAGE: ACK result: {ack_res}")
 
             # Determine final status
@@ -502,12 +551,31 @@ async def send_message(mc, channel_input, text, append_output_callback=None):
             status_msg = "✗ ERROR"  # Error
             log_debug(f"SENDING MESSAGE: Status set to ERROR, response type: {res.type}")
 
+        # Update the last message status in the app instance if available
+        if app_instance:
+            status_symbol = "⚠" if status_msg == "⚠ TIMEOUT" else ("✓✓" if status_msg == "✓✓ DELIVERED" else "✗")
+            app_instance.last_message_status = status_symbol
+            # Refresh the status bar
+            if hasattr(app_instance, 'app'):
+                app_instance.app.invalidate()
+
 
     except Exception as e:
         # Error status
-        display_message = (
-            f"[{timestamp}] {display_channel_name}: [{own_name}] {text}"
-        )
+        if is_channel_msg:
+            display_message = (
+                f"[{timestamp}] {display_channel_name}: [{own_name}] {text}"
+            )
+            # Save to history file with # symbol in the filename
+            actual_channel_name = display_channel_name if display_channel_name.startswith('#') else f"#{target_name}"
+            save_to_history(actual_channel_name, f"[{timestamp}] {display_channel_name}: [{own_name}] {text}")
+        else:
+            display_message = (
+                f"[{timestamp}] #private: [{own_name}] {text}"
+            )
+            # Save to private history file
+            save_to_history("private", f"[{timestamp}] #private: [{own_name}] {text}")
+
         if append_output_callback:
             append_output_callback(display_message)
         else:
@@ -521,10 +589,12 @@ async def send_message(mc, channel_input, text, append_output_callback=None):
         # Log the exception
         log_debug(f"SENDING MESSAGE: Exception occurred: {e}")
 
-
-        # Save to history file with # symbol in the filename
-        actual_channel_name = display_channel_name if display_channel_name.startswith('#') else f"#{channel_input}"
-        save_to_history(actual_channel_name, f"[{timestamp}] {display_channel_name}: [{own_name}] {text}")
+        # Update the last message status in the app instance if available
+        if app_instance:
+            app_instance.last_message_status = "✗"
+            # Refresh the status bar
+            if hasattr(app_instance, 'app'):
+                app_instance.app.invalidate()
 
     return True
 
