@@ -4,10 +4,20 @@ Message handling for MeshChat application
 import datetime
 import re
 from pathlib import Path
+from prompt_toolkit.formatted_text import ANSI
 from .constants import (
     ANSI_BCYAN, ANSI_GREEN, ANSI_BLUE, ANSI_BBLUE, ANSI_BYELLOW,
     ANSI_BGREEN, ANSI_BRED, ANSI_GREY, ANSI_END
 )
+
+
+def log_debug(message):
+    """Log debug information to debug.log file if DEBUG environment variable is set"""
+    import os
+    if os.environ.get('DEBUG', '').lower() in ('true', '1', 'yes', 'on'):
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        with open("debug.log", "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] {message}\n")
 
 
 # Global variables to store recent channels and users
@@ -106,12 +116,13 @@ def load_history_from_file(channel_name):
                 if line:
                     messages.append(line)
     except Exception as e:
-        print(f"Error reading history file {log_file}: {e}")
+        error_msg = f"Error reading history file {log_file}: {e}"
+        print(error_msg)
 
     return messages
 
 
-def load_all_history():
+def load_all_history(append_output_callback=None):
     """Load and display history from all channel files in chronological order"""
     history_dir = Path("history")
     if not history_dir.exists():
@@ -136,24 +147,56 @@ def load_all_history():
 
     # Display messages in chronological order
     for _, msg in all_messages:
-        print(msg)
+        if append_output_callback:
+            append_output_callback(msg)
+        else:
+            print(msg)
+
+        # Extract channel and user information from the message for autocompletion
+        # Format: [timestamp] #channel: [user] text
+        import re
+        match = re.match(r'^\[.+\] #([^:]+):\s*\[([^\]]+)\].*', msg)
+        if match:
+            channel_name = match.group(1)
+            user_name = match.group(2)
+
+            # Add to global sets
+            recent_channels.add(channel_name)
+            recent_users.add(user_name)
+
+            # Add channel with # prefix as well for autocomplete
+            channel_with_prefix = f"#{channel_name}" if not channel_name.startswith('#') else channel_name
+            recent_channels.add(channel_with_prefix)
 
 
-def process_event_message(mc, ev):
+def process_event_message(mc, ev, append_output_callback=None):
     """Process incoming message events and format output"""
     global recent_channels, recent_users  # noqa: F824 - variables are modified with .add() method
     from meshcore import EventType
 
     if ev is None:
-        print("Event does not contain message.")
+        message = "Event does not contain message."
+        if append_output_callback:
+            # For prompt_toolkit, we can pass the raw ANSI-coded string directly
+            formatted_message = f"{ANSI_BRED}{message}{ANSI_END}"
+            append_output_callback(formatted_message)
+        else:
+            print(message)
         return False
     elif ev.type == EventType.NO_MORE_MSGS:
         return False
     elif ev.type == EventType.ERROR:
-        print(f"Error retrieving messages: {ev.payload}")
+        message = f"Error retrieving messages: {ev.payload}"
+        if append_output_callback:
+            formatted_message = f"{ANSI_BRED}{message}{ANSI_END}"
+            append_output_callback(formatted_message)
+        else:
+            print(message)
+        log_debug(f"INCOMING EVENT: Error event received: {ev.payload}")
         return False
     else:
         data = ev.payload
+        log_debug(f"INCOMING EVENT: Processing event of type {ev.type}, data: {data}")
 
         # Determine channel and user information
         if data['type'] == "CHAN":  # Channel message
@@ -176,6 +219,8 @@ def process_event_message(mc, ev):
             # First try to use the name field directly if available
             if 'name' in data and data['name']:
                 sender = data['name']
+                # Add to recent users if we have a name
+                recent_users.add(data['name'])
             # Then try to look up by pubkey_prefix
             elif 'pubkey_prefix' in data:
                 ct = mc.get_contact_by_key_prefix(data['pubkey_prefix'])
@@ -219,7 +264,13 @@ def process_event_message(mc, ev):
                 f"{text}{ANSI_END}"
             )
 
-            print(colored_message)
+            if append_output_callback:
+                append_output_callback(colored_message)
+            else:
+                print(colored_message)
+
+            # Log the incoming message
+            log_debug(f"INCOMING MESSAGE: channel={display_channel_name}, sender={sender}, text='{text}', timestamp={timestamp}")
 
             # Save to history file
             save_to_history(channel_name, message)
@@ -256,7 +307,13 @@ def process_event_message(mc, ev):
                 f"{data['text']}{ANSI_END}"
             )
 
-            print(colored_message)
+            if append_output_callback:
+                append_output_callback(colored_message)
+            else:
+                print(colored_message)
+
+            # Log the incoming private message
+            log_debug(f"INCOMING PRIVATE MESSAGE: sender={sender}, text='{data['text']}', timestamp={timestamp}")
 
             # Save to history file
             save_to_history("private", message)
@@ -346,7 +403,7 @@ def clean_history_files():
         remove_duplicate_messages(channel_name)
 
 
-async def send_message(mc, channel_input, text):
+async def send_message(mc, channel_input, text, append_output_callback=None):
     """Send a message to a channel"""
     # Import here to avoid circular imports
     from meshcore import EventType
@@ -375,11 +432,19 @@ async def send_message(mc, channel_input, text):
         channel_idx = int(channel_input)
 
     if channel_idx is None:
-        print(f"{ANSI_BRED}Error: Channel '{channel_input}' not found{ANSI_END}")
+        error_msg = f"{ANSI_BRED}Error: Channel '{channel_input}' not found{ANSI_END}"
+        if append_output_callback:
+            append_output_callback(ANSI(error_msg))
+        else:
+            print(error_msg)
         # Print available channels for debugging
         if hasattr(mc, "channels") and mc.channels:
             available = [ch['channel_name'] for ch in mc.channels if ch['channel_name'] and ch['channel_name'] != ""]
-            print(f"{ANSI_BCYAN}Available channels: {available}{ANSI_END}")
+            available_msg = f"{ANSI_BCYAN}Available channels: {available}{ANSI_END}"
+            if append_output_callback:
+                append_output_callback(ANSI(available_msg))
+            else:
+                print(available_msg)
         return False
 
     # Format timestamp
@@ -391,57 +456,87 @@ async def send_message(mc, channel_input, text):
     # Format channel name for display - add # prefix if it doesn't already have one
     display_channel_name = channel_input if channel_input.startswith('#') else f"#{channel_input}"
 
+    # Format message for display (without status indicators initially)
+    display_message = (
+        f"[{timestamp}] {display_channel_name}: [{own_name}] {text}"
+    )
+
+    # Display the message immediately in the UI
+    if append_output_callback:
+        append_output_callback(display_message)
+    else:
+        print(display_message)
+
+    # Log the outgoing message
+    log_debug(f"OUTGOING MESSAGE: channel={channel_input}, text='{text}', timestamp={timestamp}")
+
+    # Save to history file with # symbol in the filename
+    actual_channel_name = display_channel_name if display_channel_name.startswith('#') else f"#{channel_input}"
+    save_to_history(actual_channel_name, f"[{timestamp}] {display_channel_name}: [{own_name}] {text}")
+
+    # Add to recent channels for autocompletion
+    from .messages import recent_channels
+    recent_channels.add(channel_input)
+
+
     # Send the message
     try:
+        log_debug(f"SENDING MESSAGE: Attempting to send to channel_idx={channel_idx}")
         res = await mc.commands.send_chan_msg(channel_idx, text)
+        log_debug(f"SENDING MESSAGE: Response received: {res}")
 
         # Wait for ACK to determine final status
         if res and res.type != EventType.ERROR:
+            log_debug("SENDING MESSAGE: Waiting for ACK...")
             ack_res = await mc.wait_for_event(EventType.ACK, timeout=10)
+            log_debug(f"SENDING MESSAGE: ACK result: {ack_res}")
 
             # Determine final status
             if ack_res is None:
-                status_msg = f"{ANSI_BYELLOW}⚠{ANSI_END}"  # Timeout
+                status_msg = "⚠ TIMEOUT"  # Timeout
+                log_debug("SENDING MESSAGE: Status set to TIMEOUT")
             else:
-                status_msg = f"{ANSI_BGREEN}✓✓{ANSI_END}"  # Delivered
+                status_msg = "✓✓ DELIVERED"  # Delivered
+                log_debug("SENDING MESSAGE: Status set to DELIVERED")
         else:
-            status_msg = f"{ANSI_BRED}✗{ANSI_END}"  # Error
+            status_msg = "✗ ERROR"  # Error
+            log_debug(f"SENDING MESSAGE: Status set to ERROR, response type: {res.type}")
 
-        # Create final message with status
-        colored_message = (
-            f"{ANSI_GREY}[{timestamp}]{ANSI_END} "
-            f"{ANSI_GREEN}{display_channel_name}:{ANSI_END} "
-            f"{ANSI_BBLUE}[{own_name}]{ANSI_END} "
-            f"{text}{ANSI_END} "
-            f"{status_msg}"
-        )
-
-        # Print the final message with status
-        print(colored_message)
-
-        # Save to history file
-        save_to_history(channel_input, f"[{timestamp}] {display_channel_name}: [{own_name}] {text}")
 
     except Exception as e:
         # Error status
-        status_msg = f"{ANSI_BRED}✗{ANSI_END}"  # Error
-        colored_message = (
-            f"{ANSI_GREY}[{timestamp}]{ANSI_END} "
-            f"{ANSI_GREEN}{display_channel_name}:{ANSI_END} "
-            f"{ANSI_BBLUE}[{own_name}]{ANSI_END} "
-            f"{text}{ANSI_END} "
-            f"{status_msg}"
+        display_message = (
+            f"[{timestamp}] {display_channel_name}: [{own_name}] {text}"
         )
-        print(colored_message)
-        print(f"{ANSI_BRED}Error sending message: {e}{ANSI_END}")
+        if append_output_callback:
+            append_output_callback(display_message)
+        else:
+            print(display_message)
+        error_msg = f"Error sending message: {e}"
+        if append_output_callback:
+            append_output_callback(error_msg)
+        else:
+            print(error_msg)
 
-        # Save to history file
-        save_to_history(channel_input, f"[{timestamp}] {display_channel_name}: [{own_name}] {text}")
+        # Log the exception
+        log_debug(f"SENDING MESSAGE: Exception occurred: {e}")
+
+
+        # Save to history file with # symbol in the filename
+        actual_channel_name = display_channel_name if display_channel_name.startswith('#') else f"#{channel_input}"
+        save_to_history(actual_channel_name, f"[{timestamp}] {display_channel_name}: [{own_name}] {text}")
 
     return True
 
 
-def show_available_channels_and_users():
+def show_available_channels_and_users(append_output_callback=None):
     """Show available channels and users"""
-    print(f"{ANSI_BCYAN}Available channels: {sorted(list(recent_channels))}{ANSI_END}")
-    print(f"{ANSI_BCYAN}Recent users: {sorted(list(recent_users))}{ANSI_END}")
+    channels_msg = f"{ANSI_BCYAN}Available channels: {sorted(list(recent_channels))}{ANSI_END}"
+    users_msg = f"{ANSI_BCYAN}Recent users: {sorted(list(recent_users))}{ANSI_END}"
+
+    if append_output_callback:
+        append_output_callback(channels_msg)
+        append_output_callback(users_msg)
+    else:
+        print(channels_msg)
+        print(users_msg)

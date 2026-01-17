@@ -315,5 +315,103 @@ class TestProcessEventMessage(unittest.TestCase):
                 original_hist_path.rename(original_history_dir)
 
 
+class TestFullscreenInterface(unittest.TestCase):
+    """Test the fullscreen interface functionality"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.temp_dir = tempfile.mkdtemp()
+        self.history_dir = Path(self.temp_dir) / "history"
+        self.history_dir.mkdir(exist_ok=True)
+
+    def tearDown(self):
+        """Clean up test fixtures"""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_mesh_chat_app_initialization(self):
+        """Test that MeshChatApp initializes correctly with fullscreen components"""
+        from mesh.meshchat import MeshChatApp
+
+        app = MeshChatApp()
+
+        # Check that the app has the required attributes
+        self.assertTrue(hasattr(app, 'output_buffer'))
+        self.assertTrue(hasattr(app, 'mc'))
+        self.assertTrue(hasattr(app, 'received_messages'))
+        self.assertTrue(hasattr(app, 'message_queue'))
+        self.assertTrue(hasattr(app, 'last_message_status'))
+
+        # Check that the app has the required UI components
+        self.assertIsNotNone(app.output_buffer_obj)
+        self.assertIsNotNone(app.status_bar)
+        self.assertIsNotNone(app.output_window)
+        self.assertIsNotNone(app.instruction_bar)
+        self.assertIsNotNone(app.input_field)
+        self.assertIsNotNone(app.app)
+
+    def test_append_output_updates_buffer(self):
+        """Test that append_output correctly updates the output buffer"""
+        from mesh.meshchat import MeshChatApp
+
+        app = MeshChatApp()
+
+        initial_buffer = app.output_buffer
+        test_text = "Test message"
+
+        app.append_output(test_text)
+
+        # Check that the buffer was updated
+        self.assertIn(test_text, app.output_buffer)
+        if initial_buffer:
+            self.assertIn("\n", app.output_buffer)
+
+    def test_status_bar_formatting(self):
+        """Test that the status bar formatting works correctly"""
+        from mesh.meshchat import MeshChatApp
+
+        app = MeshChatApp()
+
+        # Set up some test values
+        app.connected = True
+        app.device_name = "test_device"
+        app.host = "127.0.0.1"
+        app.port = "5000"
+        app.last_message_status = "✓✓"
+
+        # Get the status bar content
+        status_content = app.get_status_bar()
+
+        # Verify that it returns a list of formatted text tuples
+        self.assertIsInstance(status_content, list)
+        self.assertTrue(len(status_content) > 0)
+
+        # Check that the content contains the expected elements
+        content_str = "".join([item[1] if isinstance(item, tuple) else str(item) for item in status_content])
+        self.assertIn("CONNECTED", content_str)
+        self.assertIn("test_device", content_str)
+        self.assertIn("127.0.0.1", content_str)
+        self.assertIn("5000", content_str)
+        self.assertIn("MSG: ✓✓", content_str)
+
+    def test_instruction_bar_formatting(self):
+        """Test that the instruction bar formatting works correctly"""
+        from mesh.meshchat import MeshChatApp
+
+        app = MeshChatApp()
+
+        # Get the instruction bar content
+        instruction_content = app.get_instruction_bar()
+
+        # Verify that it returns a list of formatted text tuples
+        self.assertIsInstance(instruction_content, list)
+        self.assertTrue(len(instruction_content) > 0)
+
+        # Check that the content contains the expected elements
+        content_str = "".join([item[1] if isinstance(item, tuple) else str(item) for item in instruction_content])
+        self.assertIn("Use format: #channel_name: message to send messages", content_str)
+        self.assertIn("Press Ctrl+C to exit or type 'help' to see available channels/users", content_str)
+
+
 if __name__ == '__main__':
     unittest.main()
