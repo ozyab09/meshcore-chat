@@ -409,8 +409,8 @@ class TestFullscreenInterface(unittest.TestCase):
 
         # Check that the content contains the expected elements
         content_str = "".join([item[1] if isinstance(item, tuple) else str(item) for item in instruction_content])
-        self.assertIn("Use format: #channel_name: message to send messages", content_str)
-        self.assertIn("Press Ctrl+C to exit or type 'help' to see available channels/users", content_str)
+        self.assertIn("Last message:", content_str)
+        self.assertIn("Press Ctrl+C to exit or type '/help' to see available channels/users", content_str)
 
 
 if __name__ == '__main__':

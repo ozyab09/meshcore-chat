@@ -6,7 +6,7 @@ from .constants import ANSI_BMAGENTA, ANSI_BRED, ANSI_END
 from .messages import send_message, show_available_channels_and_users
 
 
-async def input_handler(mc):
+async def input_handler(mc, app_instance=None):
     """Handle user input for sending messages"""
     while True:
         try:
@@ -27,7 +27,7 @@ async def input_handler(mc):
                 if channel_part.startswith('#'):
                     channel_part = channel_part[1:]
 
-                await send_message(mc, channel_part, message_text)
+                await send_message(mc, channel_part, message_text, app_instance=app_instance, timeout=60)
             else:
                 print(f"{ANSI_BRED}Invalid format. Use: #channel_name: message{ANSI_END}")
         except EOFError:
